@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: rideshare
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d rideshare"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: ../backend/RideShare.Api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=rideshare;Username=postgres;Password=postgres
+      ConnectionStrings__Redis: redis:6379
+      Jwt__Issuer: RideShare
+      Jwt__Audience: RideShare.Client
+      Jwt__SigningKey: ReplaceWithLongRandomSigningKey_ForProduction_123456789
+      Jwt__ExpiresInMinutes: 120
+    ports:
+      - "5088:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  web:
+    build:
+      context: ../frontend/rideshare-web
+    environment:
+      VITE_API_BASE_URL: http://localhost:5088
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

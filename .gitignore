@@ -1,0 +1,17 @@
+# .NET
+**/bin/
+**/obj/
+
+# Node
+**/node_modules/
+frontend/rideshare-web/dist/
+
+# OS / IDE
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Env
+*.env
+*.env.*
+!.env.example
