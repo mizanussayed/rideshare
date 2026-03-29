@@ -278,6 +278,30 @@ public static class RideEndpoints
             return Results.Ok(new { message = "Thank you for the feedback." });
         });
 
+        group.MapGet("/current", async (AppDbContext db, HttpContext httpContext, CancellationToken ct) =>
+        {
+            var userId = httpContext.UserId();
+            var role = httpContext.Role();
+
+            Ride? ride = null;
+            if (role == Roles.Customer)
+            {
+                ride = await db.Rides
+                    .Where(x => x.CustomerId == userId && x.Status != RideStatus.Paid && x.Status != RideStatus.Cancelled)
+                    .OrderByDescending(x => x.RequestedAt)
+                    .FirstOrDefaultAsync(ct);
+            }
+            else if (role == Roles.Driver)
+            {
+                ride = await db.Rides
+                    .Where(x => x.DriverId == userId && x.Status != RideStatus.Completed && x.Status != RideStatus.Paid && x.Status != RideStatus.Cancelled)
+                    .OrderByDescending(x => x.RequestedAt)
+                    .FirstOrDefaultAsync(ct);
+            }
+
+            return Results.Ok(ride);
+        });
+
         group.MapGet("/history", async (AppDbContext db, HttpContext httpContext, CancellationToken ct) =>
         {
             var userId = httpContext.UserId();

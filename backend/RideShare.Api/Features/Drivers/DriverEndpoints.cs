@@ -40,6 +40,27 @@ public static class DriverEndpoints
             return Results.Ok(new { message = "Location updated" });
         });
 
+        group.MapGet("/me", async (AppDbContext db, ILocationStore locationStore, HttpContext httpContext, CancellationToken ct) =>
+        {
+            var userId = httpContext.UserId();
+            var profile = await db.DriverProfiles.FirstOrDefaultAsync(x => x.UserId == userId, ct);
+            if (profile is null)
+            {
+                return Results.NotFound();
+            }
+
+            var location = await locationStore.GetDriverLocationAsync(userId, ct);
+            return Results.Ok(new
+            {
+                profile.IsOnline,
+                profile.Rating,
+                profile.VehicleType,
+                profile.TotalEarnings,
+                Lat = location?.Lat,
+                Lng = location?.Lng
+            });
+        });
+
         group.MapGet("/earnings", async (AppDbContext db, HttpContext httpContext, CancellationToken ct) =>
         {
             var userId = httpContext.UserId();
