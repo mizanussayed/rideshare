@@ -1,22 +1,39 @@
 import { useEffect, useMemo, useState } from "react";
 import BookingMap from "../components/BookingMap";
 import DashboardHeader from "../components/DashboardHeader";
-import { api, connectRideHub, type LocationDto, type NearbyDriverInfo } from "../lib/api";
+import { api, connectRideHub, type DriverLocationEvent, type LocationDto, type NearbyDriverInfo } from "../lib/api";
 import { extractErrorMessage, normalizeRideStatus, type DashboardProps, type RideState } from "../lib/appTypes";
 
 const defaultPickup = { lat: 23.8103, lng: 90.4125 };
 const defaultDestination = { lat: 23.7806, lng: 90.4070 };
 
 type RideSnapshot = RideState & {
+  driverId?: string | null;
   pickupLat: number;
   pickupLng: number;
   destinationLat: number;
   destinationLng: number;
 };
 
+type DriverContact = {
+  driverId: string;
+  name: string;
+  phone: string;
+  vehicleType: string;
+  rating: number;
+};
+
 function isTerminalRide(status: string | number) {
   const normalized = normalizeRideStatus(status).toUpperCase();
   return normalized === "PAID" || normalized === "CANCELLED";
+}
+
+function rideStatus(status: string | number | undefined) {
+  if (!status) {
+    return "";
+  }
+
+  return normalizeRideStatus(status).toUpperCase();
 }
 
 export default function CustomerDashboard({ auth, onLogout, addToast }: DashboardProps) {
@@ -26,6 +43,8 @@ export default function CustomerDashboard({ auth, onLogout, addToast }: Dashboar
   const [estimate, setEstimate] = useState<{ estimatedFare: number; distanceKm: number; durationMin: number; surgeMultiplier: number } | null>(null);
   const [nearbyDrivers, setNearbyDrivers] = useState<NearbyDriverInfo[]>([]);
   const [ride, setRide] = useState<RideState | null>(null);
+  const [driverLocation, setDriverLocation] = useState<LocationDto | null>(null);
+  const [driverContact, setDriverContact] = useState<DriverContact | null>(null);
   const [feedback, setFeedback] = useState("");
   const [rating, setRating] = useState(5);
 
@@ -37,16 +56,43 @@ export default function CustomerDashboard({ auth, onLogout, addToast }: Dashboar
     return [5, 6, "Completed", "Paid", "COMPLETED", "PAID"].includes(ride.status);
   }, [ride]);
 
+  const currentRideStatus = rideStatus(ride?.status);
+  const canRequestRide = !ride || isTerminalRide(ride.status);
+  const canCancelRide = ["REQUESTED", "MATCHED", "ACCEPTED", "ARRIVING"].includes(currentRideStatus);
+  const canPayRide = currentRideStatus === "COMPLETED";
+
   useEffect(() => {
     const connection = connectRideHub(auth.accessToken, (payload) => {
-      const next = payload as RideState;
+      const next = payload as RideSnapshot;
       setRide(next);
+    }, (event: DriverLocationEvent) => {
+      if (ride && "driverId" in ride && ride.driverId && ride.driverId === event.driverId) {
+        setDriverLocation({ lat: event.lat, lng: event.lng });
+      }
     });
 
     return () => {
       connection.stop().catch(() => undefined);
     };
-  }, [auth.accessToken]);
+  }, [auth.accessToken, ride]);
+
+  useEffect(() => {
+    async function loadDriverContact() {
+      if (!ride || !("id" in ride)) {
+        setDriverContact(null);
+        return;
+      }
+
+      try {
+        const response = await api.get<DriverContact>(`/api/rides/${ride.id}/driver-contact`);
+        setDriverContact(response.data);
+      } catch {
+        setDriverContact(null);
+      }
+    }
+
+    loadDriverContact();
+  }, [ride]);
 
   useEffect(() => {
     async function restoreCurrentRide() {
@@ -105,6 +151,7 @@ export default function CustomerDashboard({ auth, onLogout, addToast }: Dashboar
     try {
       const response = await api.post("/api/rides/request", { pickup, destination, paymentMethod: 0 });
       setRide(response.data);
+      setDriverLocation(null);
       addToast("success", "Ride requested successfully.");
     } catch (error) {
       addToast("error", extractErrorMessage(error));
@@ -119,6 +166,8 @@ export default function CustomerDashboard({ auth, onLogout, addToast }: Dashboar
     try {
       await api.post("/api/rides/cancel", { rideId: ride.id, reason: "Customer changed plan" });
       setRide(null);
+      setDriverLocation(null);
+      setDriverContact(null);
       addToast("success", "Ride canceled.");
     } catch (error) {
       addToast("error", extractErrorMessage(error));
@@ -164,6 +213,7 @@ export default function CustomerDashboard({ auth, onLogout, addToast }: Dashboar
           <BookingMap
             pickup={pickup}
             destination={destination}
+            driverLocation={driverLocation}
             onPickupChange={setPickup}
             onDestinationChange={setDestination}
             drawRoute={destinationSetByUser}
@@ -188,9 +238,9 @@ export default function CustomerDashboard({ auth, onLogout, addToast }: Dashboar
               </div>
             )}
 
-            <button onClick={requestRide}>Request Ride</button>
-            <button className="ghost" onClick={cancelRide}>Cancel Ride</button>
-            <button className="ghost" onClick={payRide}>Pay</button>
+            {canRequestRide && <button onClick={requestRide}>Request Ride</button>}
+            {canCancelRide && <button className="ghost" onClick={cancelRide}>Cancel Ride</button>}
+            {canPayRide && <button className="ghost" onClick={payRide}>Pay</button>}
 
             {canSubmitFeedback && (
               <div className="rating-box">
@@ -204,6 +254,15 @@ export default function CustomerDashboard({ auth, onLogout, addToast }: Dashboar
             )}
 
             {!canSubmitFeedback && <p className="hint">Feedback unlocks after ride is completed or paid.</p>}
+
+            {driverContact && (
+              <div className="nearby-panel">
+                <h3>Assigned Driver</h3>
+                <p><strong>{driverContact.name}</strong> • {driverContact.vehicleType} • Rating {driverContact.rating.toFixed(1)}</p>
+                {driverLocation && <p>Live location: {driverLocation.lat.toFixed(5)}, {driverLocation.lng.toFixed(5)}</p>}
+                <a href={`tel:${driverContact.phone}`}>Call Driver: {driverContact.phone}</a>
+              </div>
+            )}
 
             <div className="nearby-panel">
               <h3>Nearest Free Drivers</h3>

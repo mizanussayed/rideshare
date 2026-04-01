@@ -167,6 +167,11 @@ public static class RideEndpoints
                 return Results.NotFound();
             }
 
+            if (ride.Status != RideStatus.Accepted)
+            {
+                return Results.BadRequest(new { message = "Ride can move to arriving only after acceptance." });
+            }
+
             ride.Status = RideStatus.Arriving;
             await db.SaveChangesAsync(ct);
             await hub.Clients.Group($"user:{ride.CustomerId}").SendAsync("ride.status", ride, ct);
@@ -180,6 +185,11 @@ public static class RideEndpoints
             if (ride is null)
             {
                 return Results.NotFound();
+            }
+
+            if (ride.Status != RideStatus.Arriving)
+            {
+                return Results.BadRequest(new { message = "Ride can start only after arriving status." });
             }
 
             ride.Status = RideStatus.Started;
@@ -196,6 +206,11 @@ public static class RideEndpoints
             if (ride is null)
             {
                 return Results.NotFound();
+            }
+
+            if (ride.Status != RideStatus.Started)
+            {
+                return Results.BadRequest(new { message = "Ride can complete only after start." });
             }
 
             var pricing = await db.PricingPolicies.FirstAsync(ct);
@@ -344,6 +359,37 @@ public static class RideEndpoints
             }
 
             return Results.Ok(ride is null ? null : ToRideResponse(ride));
+        });
+
+        group.MapGet("/{rideId:guid}/driver-contact", [Authorize(Roles = Roles.Customer)] async (Guid rideId, AppDbContext db, HttpContext httpContext, CancellationToken ct) =>
+        {
+            var customerId = httpContext.UserId();
+            var ride = await db.Rides.FirstOrDefaultAsync(x => x.Id == rideId && x.CustomerId == customerId, ct);
+            if (ride is null)
+            {
+                return Results.NotFound();
+            }
+
+            if (!ride.DriverId.HasValue)
+            {
+                return Results.NotFound(new { message = "Driver not assigned yet." });
+            }
+
+            var driver = await db.Users
+                .Include(x => x.DriverProfile)
+                .FirstOrDefaultAsync(x => x.Id == ride.DriverId.Value, ct);
+
+            if (driver is null || driver.DriverProfile is null)
+            {
+                return Results.NotFound(new { message = "Driver profile not found." });
+            }
+
+            return Results.Ok(new DriverContactInfo(
+                driver.Id,
+                driver.FullName,
+                driver.Phone,
+                driver.DriverProfile.VehicleType,
+                driver.DriverProfile.Rating));
         });
 
         group.MapGet("/history", async (AppDbContext db, HttpContext httpContext, CancellationToken ct) =>

@@ -10,6 +10,7 @@ export type AuthResponse = {
 };
 
 export type LocationDto = { lat: number; lng: number };
+export type DriverLocationEvent = { driverId: string; lat: number; lng: number };
 export type NearbyDriverInfo = {
   driverId: string;
   name: string;
@@ -28,7 +29,11 @@ export function setAuthToken(token: string) {
   api.defaults.headers.common.Authorization = `Bearer ${token}`;
 }
 
-export function connectRideHub(token: string, onRideStatus: (payload: unknown) => void) {
+export function connectRideHub(
+  token: string,
+  onRideStatus: (payload: unknown) => void,
+  onDriverLocation?: (payload: DriverLocationEvent) => void
+) {
   const connection = new HubConnectionBuilder()
     .withUrl(`${baseURL}/hubs/rides`, { accessTokenFactory: () => token })
     .withAutomaticReconnect()
@@ -36,6 +41,9 @@ export function connectRideHub(token: string, onRideStatus: (payload: unknown) =
     .build();
 
   connection.on("ride.status", onRideStatus);
+  if (onDriverLocation) {
+    connection.on("driver.location", onDriverLocation);
+  }
   connection.start().catch((error) => {
     console.error("SignalR connection failed", error);
   });

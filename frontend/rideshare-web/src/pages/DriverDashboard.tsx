@@ -13,6 +13,8 @@ type DriverRide = {
 type AvailableRide = {
   rideId: string;
   customerId: string;
+  customerName: string;
+  customerPhone: string;
   pickupLat: number;
   pickupLng: number;
   destinationLat: number;
@@ -61,6 +63,12 @@ export default function DriverDashboard({ auth, onLogout, addToast }: DashboardP
   const [earnings, setEarnings] = useState<{ totalEarnings: number; todayEarnings: number } | null>(null);
   const [history, setHistory] = useState<DriverRide[]>([]);
   const [availableRides, setAvailableRides] = useState<AvailableRide[]>([]);
+
+  const selectedRide =
+    (rideId && availableRides.find((item) => item.rideId === rideId)) ||
+    (rideId && history.find((item) => item.id === rideId)) ||
+    null;
+  const selectedAction = selectedRide ? nextRideAction(selectedRide.status) : null;
 
   async function loadDriverData() {
     try {
@@ -156,12 +164,8 @@ export default function DriverDashboard({ auth, onLogout, addToast }: DashboardP
           <h2>Ride Workflow</h2>
           <div className="stack">
             <input value={rideId} onChange={(e) => setRideId(e.target.value)} placeholder="Ride ID" />
-            <div className="split-actions">
-              <button onClick={() => updateRideStatus("accept")}>Accept</button>
-              <button onClick={() => updateRideStatus("arriving")}>Arriving</button>
-              <button onClick={() => updateRideStatus("start")}>Start</button>
-              <button onClick={() => updateRideStatus("complete")}>Complete</button>
-            </div>
+            {selectedAction && <button onClick={() => updateRideStatus(selectedAction.path)}>{selectedAction.label}</button>}
+            {!selectedAction && <p className="hint">Select an active ride ID to see valid action.</p>}
             <button className="ghost" onClick={loadDriverData}>Refresh Earnings & History</button>
           </div>
 
@@ -181,6 +185,10 @@ export default function DriverDashboard({ auth, onLogout, addToast }: DashboardP
               {availableRides.slice(0, 20).map((ride) => (
                 <li key={ride.rideId}>
                   <strong>{ride.rideId}</strong>
+                  <span>Customer: {ride.customerName}</span>
+                  <span>Call: {ride.customerPhone}</span>
+                  <span>Pickup: {ride.pickupLat.toFixed(4)}, {ride.pickupLng.toFixed(4)}</span>
+                  <span>Drop: {ride.destinationLat.toFixed(4)}, {ride.destinationLng.toFixed(4)}</span>
                   <span>{normalizeRideStatus(ride.status)}</span>
                   <span>Est. Fare: BDT {ride.estimatedFare}</span>
                   <button

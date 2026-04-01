@@ -106,6 +106,8 @@ public static class DriverEndpoints
                 .Select(x => new DriverAvailableRide(
                     x.Id,
                     x.CustomerId,
+                    x.Customer.FullName,
+                    x.Customer.Phone,
                     x.PickupLat,
                     x.PickupLng,
                     x.DestinationLat,

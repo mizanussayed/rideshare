@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { setAuthToken, type AuthResponse } from "./lib/api";
 import { authStorageKey, rolePath, type Toast } from "./lib/appTypes";
@@ -21,6 +21,7 @@ export default function App() {
     }
   });
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [authReady, setAuthReady] = useState(false);
 
   function addToast(kind: Toast["kind"], message: string) {
     const id = Date.now() + Math.floor(Math.random() * 1000);
@@ -30,7 +31,7 @@ export default function App() {
     }, 3500);
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (auth) {
       setAuthToken(auth.accessToken);
       localStorage.setItem(authStorageKey, JSON.stringify(auth));
@@ -38,10 +39,16 @@ export default function App() {
       setAuthToken("");
       localStorage.removeItem(authStorageKey);
     }
+
+    setAuthReady(true);
   }, [auth]);
 
   function logout() {
     setAuth(null);
+  }
+
+  if (!authReady) {
+    return null;
   }
 
   return (
