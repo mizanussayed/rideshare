@@ -11,6 +11,34 @@ namespace RideShare.Api.Features.Rides;
 
 public static class RideEndpoints
 {
+    private static object ToRideResponse(Ride ride) => new
+    {
+        ride.Id,
+        ride.CustomerId,
+        ride.DriverId,
+        ride.PickupLat,
+        ride.PickupLng,
+        ride.DestinationLat,
+        ride.DestinationLng,
+        ride.EstimatedDistanceKm,
+        ride.EstimatedDurationMin,
+        ride.EstimatedFare,
+        ride.FinalFare,
+        ride.Status,
+        ride.PaymentMethod,
+        ride.RequestedAt,
+        ride.AcceptedAt,
+        ride.StartedAt,
+        ride.CompletedAt,
+        ride.PaidAt,
+        ride.CancelledAt,
+        ride.SurgeMultiplier,
+        ride.PlatformCommissionPercent,
+        ride.PlatformCommissionAmount,
+        ride.DriverPayoutAmount,
+        ride.CancellationReason
+    };
+
     public static RouteGroupBuilder MapRideEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/rides")
@@ -84,7 +112,7 @@ public static class RideEndpoints
             }
 
             await hub.Clients.Group($"user:{customerId}").SendAsync("ride.status", ride, ct);
-            return Results.Ok(ride);
+            return Results.Ok(ToRideResponse(ride));
         });
 
         group.MapPost("/accept", [Authorize(Roles = Roles.Driver)] async (
@@ -101,9 +129,25 @@ public static class RideEndpoints
                 return Results.NotFound();
             }
 
-            if (ride.DriverId != driverId || ride.Status is not (RideStatus.Matched or RideStatus.Requested))
+            if (ride.Status == RideStatus.Matched)
             {
-                return Results.BadRequest(new { message = "Ride is not available for this driver." });
+                if (ride.DriverId != driverId)
+                {
+                    return Results.BadRequest(new { message = "Ride is assigned to a different driver." });
+                }
+            }
+            else if (ride.Status == RideStatus.Requested)
+            {
+                if (ride.DriverId.HasValue && ride.DriverId != driverId)
+                {
+                    return Results.BadRequest(new { message = "Ride is already reserved for another driver." });
+                }
+
+                ride.DriverId = driverId;
+            }
+            else
+            {
+                return Results.BadRequest(new { message = "Ride cannot be accepted in current state." });
             }
 
             ride.Status = RideStatus.Accepted;
@@ -111,7 +155,7 @@ public static class RideEndpoints
             await db.SaveChangesAsync(ct);
 
             await hub.Clients.Group($"user:{ride.CustomerId}").SendAsync("ride.status", ride, ct);
-            return Results.Ok(ride);
+            return Results.Ok(ToRideResponse(ride));
         });
 
         group.MapPost("/arriving", [Authorize(Roles = Roles.Driver)] async ([FromBody] RideActionRequest request, AppDbContext db, HttpContext httpContext, IHubContext<RideHub> hub, CancellationToken ct) =>
@@ -126,7 +170,7 @@ public static class RideEndpoints
             ride.Status = RideStatus.Arriving;
             await db.SaveChangesAsync(ct);
             await hub.Clients.Group($"user:{ride.CustomerId}").SendAsync("ride.status", ride, ct);
-            return Results.Ok(ride);
+            return Results.Ok(ToRideResponse(ride));
         });
 
         group.MapPost("/start", [Authorize(Roles = Roles.Driver)] async ([FromBody] RideActionRequest request, AppDbContext db, HttpContext httpContext, IHubContext<RideHub> hub, CancellationToken ct) =>
@@ -142,7 +186,7 @@ public static class RideEndpoints
             ride.StartedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
             await hub.Clients.Group($"user:{ride.CustomerId}").SendAsync("ride.status", ride, ct);
-            return Results.Ok(ride);
+            return Results.Ok(ToRideResponse(ride));
         });
 
         group.MapPost("/complete", [Authorize(Roles = Roles.Driver)] async ([FromBody] RideActionRequest request, AppDbContext db, HttpContext httpContext, IHubContext<RideHub> hub, CancellationToken ct) =>
@@ -171,7 +215,7 @@ public static class RideEndpoints
 
             await db.SaveChangesAsync(ct);
             await hub.Clients.Group($"user:{ride.CustomerId}").SendAsync("ride.status", ride, ct);
-            return Results.Ok(ride);
+            return Results.Ok(ToRideResponse(ride));
         });
 
         group.MapPost("/pay", [Authorize(Roles = Roles.Customer)] async ([FromBody] RideActionRequest request, AppDbContext db, HttpContext httpContext, IHubContext<RideHub> hub, CancellationToken ct) =>
@@ -197,7 +241,7 @@ public static class RideEndpoints
                 await hub.Clients.Group($"user:{ride.DriverId.Value}").SendAsync("ride.status", ride, ct);
             }
 
-            return Results.Ok(ride);
+            return Results.Ok(ToRideResponse(ride));
         });
 
         group.MapPost("/cancel", [Authorize(Roles = Roles.Customer)] async ([FromBody] CancelRideRequest request, AppDbContext db, HttpContext httpContext, CancellationToken ct) =>
@@ -299,7 +343,7 @@ public static class RideEndpoints
                     .FirstOrDefaultAsync(ct);
             }
 
-            return Results.Ok(ride);
+            return Results.Ok(ride is null ? null : ToRideResponse(ride));
         });
 
         group.MapGet("/history", async (AppDbContext db, HttpContext httpContext, CancellationToken ct) =>
@@ -318,7 +362,7 @@ public static class RideEndpoints
             }
 
             var rides = await query.OrderByDescending(x => x.RequestedAt).Take(100).ToListAsync(ct);
-            return Results.Ok(rides);
+            return Results.Ok(rides.Select(ToRideResponse));
         });
 
         group.MapGet("/{rideId:guid}", async (Guid rideId, AppDbContext db, HttpContext httpContext, CancellationToken ct) =>
@@ -341,7 +385,7 @@ public static class RideEndpoints
                 return Results.Forbid();
             }
 
-            return Results.Ok(ride);
+            return Results.Ok(ToRideResponse(ride));
         });
 
         return group;

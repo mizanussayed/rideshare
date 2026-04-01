@@ -94,6 +94,30 @@ public static class DriverEndpoints
             return Results.Ok(rides);
         });
 
+        group.MapGet("/rides/available", async (AppDbContext db, HttpContext httpContext, CancellationToken ct) =>
+        {
+            var userId = httpContext.UserId();
+            var rides = await db.Rides
+                .Where(x =>
+                    (x.Status == RideStatus.Requested && x.DriverId == null) ||
+                    (x.Status == RideStatus.Matched && x.DriverId == userId))
+                .OrderByDescending(x => x.RequestedAt)
+                .Take(100)
+                .Select(x => new DriverAvailableRide(
+                    x.Id,
+                    x.CustomerId,
+                    x.PickupLat,
+                    x.PickupLng,
+                    x.DestinationLat,
+                    x.DestinationLng,
+                    x.EstimatedFare,
+                    x.Status,
+                    x.RequestedAt))
+                .ToListAsync(ct);
+
+            return Results.Ok(rides);
+        });
+
         return group;
     }
 }

@@ -10,6 +10,18 @@ type DriverRide = {
   requestedAt: string;
 };
 
+type AvailableRide = {
+  rideId: string;
+  customerId: string;
+  pickupLat: number;
+  pickupLng: number;
+  destinationLat: number;
+  destinationLng: number;
+  estimatedFare: number;
+  status: string | number;
+  requestedAt: string;
+};
+
 type DriverProfile = {
   isOnline: boolean;
   rating: number;
@@ -48,13 +60,15 @@ export default function DriverDashboard({ auth, onLogout, addToast }: DashboardP
   const [profile, setProfile] = useState<DriverProfile | null>(null);
   const [earnings, setEarnings] = useState<{ totalEarnings: number; todayEarnings: number } | null>(null);
   const [history, setHistory] = useState<DriverRide[]>([]);
+  const [availableRides, setAvailableRides] = useState<AvailableRide[]>([]);
 
   async function loadDriverData() {
     try {
-      const [profileRes, earningsRes, historyRes] = await Promise.all([
+      const [profileRes, earningsRes, historyRes, availableRes] = await Promise.all([
         api.get<DriverProfile>("/api/drivers/me"),
         api.get<{ totalEarnings: number; todayEarnings: number }>("/api/drivers/earnings"),
-        api.get<DriverRide[]>("/api/drivers/rides/history")
+        api.get<DriverRide[]>("/api/drivers/rides/history"),
+        api.get<AvailableRide[]>("/api/drivers/rides/available")
       ]);
 
       setProfile(profileRes.data);
@@ -65,6 +79,7 @@ export default function DriverDashboard({ auth, onLogout, addToast }: DashboardP
       }
       setEarnings(earningsRes.data);
       setHistory(historyRes.data);
+      setAvailableRides(availableRes.data);
     } catch (error) {
       addToast("error", extractErrorMessage(error));
     }
@@ -159,6 +174,28 @@ export default function DriverDashboard({ auth, onLogout, addToast }: DashboardP
         </section>
 
         <section className="card status-card">
+          <h2>Available Requests</h2>
+          {availableRides.length === 0 && <p>No available requests right now.</p>}
+          {availableRides.length > 0 && (
+            <ul className="ride-list">
+              {availableRides.slice(0, 20).map((ride) => (
+                <li key={ride.rideId}>
+                  <strong>{ride.rideId}</strong>
+                  <span>{normalizeRideStatus(ride.status)}</span>
+                  <span>Est. Fare: BDT {ride.estimatedFare}</span>
+                  <button
+                    onClick={() => {
+                      setRideId(ride.rideId);
+                      void updateRideStatus("accept");
+                    }}
+                  >
+                    Accept Request
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
           <h2>Recent Assigned Rides</h2>
           {history.length === 0 && <p>No rides yet.</p>}
           {history.length > 0 && (

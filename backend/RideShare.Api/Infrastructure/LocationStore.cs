@@ -66,7 +66,7 @@ public sealed class LocationStore(IConfiguration configuration) : ILocationStore
             return null;
         }
 
-        return JsonSerializer.Deserialize<LocationDto>(val!);
+        return JsonSerializer.Deserialize<LocationDto>(val.ToString());
     }
 
     public async Task<Dictionary<Guid, LocationDto>> GetAllDriverLocationsAsync(CancellationToken ct)
@@ -96,7 +96,7 @@ public sealed class LocationStore(IConfiguration configuration) : ILocationStore
 
             if (Guid.TryParse(key.ToString().Split(':').Last(), out var id))
             {
-                var location = JsonSerializer.Deserialize<LocationDto>(val!);
+                var location = JsonSerializer.Deserialize<LocationDto>(val.ToString());
                 if (location is not null)
                 {
                     result[id] = location;

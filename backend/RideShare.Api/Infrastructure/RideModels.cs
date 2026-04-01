@@ -14,3 +14,4 @@ public sealed record UpdateDriverLocationRequest(double Lat, double Lng);
 public sealed record SetDriverOnlineRequest(bool IsOnline);
 public sealed record UpdatePricingRequest(decimal BaseFare, decimal RatePerKm, decimal RatePerMin, decimal SurgeFactorCap, decimal CancellationFee, decimal PlatformCommissionPercent);
 public sealed record NearbyDriverInfo(Guid DriverId, string Name, string Phone, string VehicleType, double Rating, double DistanceKm, bool IsOnline);
+public sealed record DriverAvailableRide(Guid RideId, Guid CustomerId, double PickupLat, double PickupLng, double DestinationLat, double DestinationLng, decimal EstimatedFare, RideStatus Status, DateTimeOffset RequestedAt);
